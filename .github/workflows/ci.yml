@@ -17,9 +17,12 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Build for iOS Simulator
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build and run tests
         run: |
-          xcodebuild build \
+          xcodebuild test \
             -project StravaClone.xcodeproj \
             -scheme StravaClone \
             -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
