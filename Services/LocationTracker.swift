@@ -1,31 +1,14 @@
 import Foundation
 import CoreLocation
-
-/// Contract that any location-tracking implementation must satisfy.
-/// The real GPS implementation (LocationTracker) and any mock/test
-/// implementation both conform to this, so the rest of the app never
-/// needs to know which one it's talking to.
-protocol LocationTracking: AnyObject, ObservableObject {
-    var isTracking: Bool { get }
-    var currentLocation: CLLocation? { get }
-    var routePoints: [CLLocation] { get }
-    var distanceMeters: Double { get }
-    var elapsedSeconds: TimeInterval { get }
-    var authorizationStatus: CLAuthorizationStatus { get }
-
-    func requestPermission()
-    func start(activity: ActivityType)
-    func stop() -> (points: [CLLocation], distance: Double, duration: TimeInterval, start: Date, end: Date)?
-}
-
 import Combine
 
-/// Kayıt sırasında GPS'i yönetir: konum güncellemelerini alır, mesafeyi hesaplar,
-/// hatalı/sıçramalı GPS noktalarını filtreler ve canlı istatistikleri yayınlar.
+/// Manages GPS during an active recording session: receives location updates,
+/// calculates cumulative distance, filters out inaccurate/implausible GPS
+/// points, and publishes live stats for the UI to observe.
 @MainActor
 final class LocationTracker: NSObject, LocationTracking {
 
-    // MARK: - Published state (UI buraya bağlanır)
+    // MARK: - Published state (the UI binds to these)
     @Published var isTracking = false
     @Published var currentLocation: CLLocation?
     @Published var routePoints: [CLLocation] = []
@@ -39,16 +22,16 @@ final class LocationTracker: NSObject, LocationTracking {
     private var startDate: Date?
     private var activityType: ActivityType = .running
 
-    // Hatalı GPS noktalarını elemek için eşik değerler
-    private let maxAcceptableAccuracy: Double = 25 // metre - bundan kötü doğrulukları at
-    private let maxPlausibleSpeed: Double = 15 // m/s (~54 km/s) - bisiklet için bile makul üst sınır
+    // Thresholds used to filter out bad GPS points
+    private let maxAcceptableAccuracy: Double = 25 // meters - discard anything worse than this
+    private let maxPlausibleSpeed: Double = 15 // m/s (~54 km/h) - reasonable upper bound even for cycling
 
     override init() {
         super.init()
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyBest
         manager.activityType = .fitness
-        manager.distanceFilter = 5 // 5 metreden az hareketleri yok say (gürültüyü azaltır)
+        manager.distanceFilter = 5 // ignore movements smaller than 5 meters (reduces noise)
         manager.pausesLocationUpdatesAutomatically = false
         manager.allowsBackgroundLocationUpdates = true
         manager.showsBackgroundLocationIndicator = true
@@ -77,7 +60,8 @@ final class LocationTracker: NSObject, LocationTracking {
         }
     }
 
-    /// Kaydı durdurur ve kaydedilmeye hazır bir Activity döndürür (henüz SwiftData'ya eklenmedi)
+    /// Stops the current recording and returns the raw data needed to build
+    /// an Activity. Does not touch persistence (SwiftData) itself.
     func stop() -> (points: [CLLocation], distance: Double, duration: TimeInterval, start: Date, end: Date)? {
         guard isTracking, let start = startDate else { return nil }
         isTracking = false
@@ -90,7 +74,7 @@ final class LocationTracker: NSObject, LocationTracking {
     }
 
     func processNewLocation(_ location: CLLocation) {
-        // 1) Doğruluğu kötü olan noktaları at
+        // 1) Discard points with poor accuracy
         guard location.horizontalAccuracy >= 0, location.horizontalAccuracy <= maxAcceptableAccuracy else {
             return
         }
@@ -101,7 +85,7 @@ final class LocationTracker: NSObject, LocationTracking {
             let delta = location.distance(from: last)
             let timeDelta = location.timestamp.timeIntervalSince(last.timestamp)
 
-            // 2) Sıçrama kontrolü: gerçekçi olmayan hızda "teleport" eden noktaları at
+            // 2) Jump check: discard points that imply an unrealistic "teleport" speed
             if timeDelta > 0 {
                 let impliedSpeed = delta / timeDelta
                 if impliedSpeed > maxPlausibleSpeed {
@@ -131,6 +115,6 @@ extension LocationTracker: CLLocationManagerDelegate {
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        print("Konum hatası: \(error.localizedDescription)")
+        print("Location error: \(error.localizedDescription)")
     }
 }
