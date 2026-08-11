@@ -1,5 +1,7 @@
 # StravaClone
 
+![Build Status](https://github.com/EnesCetin96/StravaClone/actions/workflows/ci.yml/badge.svg)
+
 Kişisel kullanım için basit koşu/bisiklet takip uygulaması. Swift + SwiftUI + CoreLocation + SwiftData ile yazıldı, harici bağımlılık yok (CocoaPods/SPM paketi gerekmiyor).
 
 ## Nasıl kurulur

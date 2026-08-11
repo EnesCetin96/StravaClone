@@ -25,3 +25,13 @@ targets:
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1"
         PRODUCT_BUNDLE_IDENTIFIER: com.enescetin.StravaClone
+  StravaCloneTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Tests
+    dependencies:
+      - target: StravaClone
+    settings:
+      base:
+        SWIFT_VERSION: "5.0"
